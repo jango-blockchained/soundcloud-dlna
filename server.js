@@ -11,6 +11,7 @@ const config = require("./config.json");
 const winston = require("winston");
 const util = require("util");
 const stat = util.promisify(fs.stat);
+const net = require("net"); // Add this for DMR socket connection
 
 const logger = winston.createLogger({
   level: config.logging.level,
@@ -428,6 +429,128 @@ app.put("/files/:filename", (req, res) => {
 
 // Serve downloaded files
 app.use("/downloads", express.static(config.storage.downloadPath));
+
+// Add DMR receiver setup
+let dmrSocket = null;
+if (config.receiver.enabled && config.receiver.type === "dmr") {
+  setupDMRReceiver();
+}
+
+function setupDMRReceiver() {
+  const settings = config.receiver.settings;
+
+  dmrSocket = new net.Socket();
+
+  dmrSocket.connect(settings.port, settings.host, () => {
+    logger.info(
+      `Connected to DMR receiver at ${settings.host}:${settings.port}`
+    );
+  });
+
+  let currentRecording = null;
+  let recordingStream = null;
+  let recordingStartTime = null;
+
+  dmrSocket.on("data", (data) => {
+    try {
+      // Process incoming audio data
+      const timestamp = Date.now();
+
+      // Create new recording if none exists
+      if (!currentRecording) {
+        const recordingFileName = `${timestamp}.${settings.audioFormat}`;
+        const recordingPath = path.join(
+          settings.recordingPath,
+          recordingFileName
+        );
+
+        recordingStream = fs.createWriteStream(recordingPath);
+        currentRecording = {
+          path: recordingPath,
+          startTime: timestamp,
+          metadata: {
+            timestamp,
+            format: settings.audioFormat,
+            sampleRate: settings.sampleRate,
+            channels: settings.channels,
+            encoding: settings.encoding,
+          },
+        };
+        recordingStartTime = timestamp;
+      }
+
+      // Write audio data
+      recordingStream.write(data);
+
+      // Check duration limits
+      const duration = timestamp - recordingStartTime;
+      if (duration >= config.receiver.filters.maxDuration) {
+        finishRecording();
+      }
+    } catch (error) {
+      logger.error("Error processing DMR data:", error);
+    }
+  });
+
+  dmrSocket.on("error", (error) => {
+    logger.error("DMR socket error:", error);
+    setTimeout(setupDMRReceiver, 3000); // Reconnect after 3 seconds
+  });
+
+  dmrSocket.on("close", () => {
+    logger.info("DMR connection closed, attempting to reconnect...");
+    setTimeout(setupDMRReceiver, 3000);
+  });
+}
+
+function finishRecording() {
+  if (currentRecording && recordingStream) {
+    const duration = Date.now() - currentRecording.startTime;
+
+    // Only save if duration meets minimum requirement
+    if (duration >= config.receiver.filters.minDuration) {
+      recordingStream.end();
+
+      // Save metadata if enabled
+      if (config.receiver.settings.metadata.enabled) {
+        const metadataPath = currentRecording.path + ".json";
+        fs.writeFileSync(
+          metadataPath,
+          JSON.stringify(currentRecording.metadata)
+        );
+      }
+
+      // Handle auto-conversion if enabled
+      if (config.receiver.processing.autoConvert.enabled) {
+        convertAudio(currentRecording.path);
+      }
+    } else {
+      // Delete recording if too short
+      recordingStream.end();
+      fs.unlinkSync(currentRecording.path);
+    }
+
+    currentRecording = null;
+    recordingStream = null;
+    recordingStartTime = null;
+  }
+}
+
+async function convertAudio(inputPath) {
+  const settings = config.receiver.processing.autoConvert;
+  const outputPath = inputPath.replace(
+    path.extname(inputPath),
+    `.${settings.format}`
+  );
+
+  try {
+    // Use ffmpeg to convert the audio
+    // Implementation depends on your ffmpeg setup
+    logger.info(`Converting ${inputPath} to ${outputPath}`);
+  } catch (error) {
+    logger.error("Error converting audio:", error);
+  }
+}
 
 app.listen(port, ip, () => {
   logger.info(`Server running at http://${ip}:${port}`);

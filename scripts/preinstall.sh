@@ -146,7 +146,7 @@ check_node_version() {
         log_message "Error: Node.js is not installed"
         log_message "Please install Node.js v18 or later from: https://nodejs.org/"
         exit 1
-    }
+    fi
 
     local node_version
     node_version=$(node -v | cut -d 'v' -f 2)
@@ -158,7 +158,7 @@ check_node_version() {
         log_message "Current version: $node_version"
         log_message "Please upgrade Node.js from: https://nodejs.org/"
         exit 1
-    }
+    fi
 
     log_message "Node.js version $node_version detected"
 }
