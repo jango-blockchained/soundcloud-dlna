@@ -1,0 +1,29 @@
+# Ignore cursor files
+.cursor/
+
+# Ignore cursor-specific directories
+.cursor-cache/
+.cursor-temp/
+
+# Ignore cursor configuration files
+.cursor.json
+.cursor-config.json
+
+# Ignore cursor log files
+cursor.log
+cursor-debug.log
+
+# Ignore cursor backup files
+*.cursor-backup
+
+# Ignore cursor-generated files
+*.cursor-generated.*
+
+# Ignore cursor plugin directories
+.cursor-plugins/
+
+# Ignore cursor workspace files
+*.cursor-workspace
+
+node_modules/   
+downloads/

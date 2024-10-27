@@ -1,0 +1,28 @@
+{
+    "server": {
+        "port": 3000,
+        "ip": "0.0.0.0",
+        "cors": {
+            "enabled": false,
+            "origin": "*"
+        }
+    },
+    "storage": {
+        "downloadPath": "./downloads",
+        "tempPath": "./temp"
+    },
+    "ytdlp": {
+        "path": "/usr/local/bin/yt-dlp"
+    },
+    "logging": {
+        "level": "info",
+        "directory": "./logs"
+    },
+    "api": {
+        "rateLimiting": {
+            "enabled": false,
+            "windowMs": 900000,
+            "maxRequests": 100
+        }
+    }
+}

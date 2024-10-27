@@ -1,0 +1,23 @@
+{
+    "name": "soundcloud-dlna",
+    "version": "1.0.0",
+    "description": "SoundCloud to DLNA streaming application",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "preinstall": "chmod +x ./scripts/preinstall.sh && ./scripts/preinstall.sh"
+    },
+    "dependencies": {
+        "cors": "^2.8.5",
+        "dlnacasts2": "^0.2.0",
+        "express": "^4.21.1",
+        "express-rate-limit": "^7.4.1",
+        "music-metadata": "^10.5.1",
+        "node-id3": "^0.2.6",
+        "winston": "^3.15.0",
+        "yt-dlp-exec": "^1.0.2"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

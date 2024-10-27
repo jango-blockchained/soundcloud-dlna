@@ -1,0 +1,89 @@
+# Dependencies
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Project specific
+downloads/
+config.json
+
+# Operating System
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+*.bak
+
+# Debug logs
+debug.log
+*.log
+
+# Build output
+dist/
+build/
+out/
+
+# Media files
+*.mp3
+*.wav
+*.flac
+*.m4a
+*.mp4
+*.webm
+
+# yt-dlp specific
+*.part
+*.ytdl
+
+# ffmpeg specific
+*.mka
+*.mkv
+
+# Temporary files
+*.tmp
+*.temp
+.temp/
+temp/
+
+# Coverage and test
+coverage/
+.nyc_output/
+*.lcov
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variable files
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# Cursor specific (from existing .cur
+.cursorrules

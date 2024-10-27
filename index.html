@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SoundCloud to DLNA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Add loading spinner CSS -->
+    <style>
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #f97316;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen py-8">
+    <div class="max-w-2xl mx-auto px-4">
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <!-- Add icon and improve heading -->
+            <div class="flex items-center mb-6">
+                <svg class="w-8 h-8 text-orange-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+                <h1 class="text-3xl font-bold text-gray-800">SoundCloud to DLNA</h1>
+            </div>
+
+            <form id="dlnaForm" class="space-y-4" onsubmit="handleSubmit(event)">
+                <!-- Enhanced input fields with validation -->
+                <div>
+                    <label for="soundcloudUrl" class="block text-sm font-medium text-gray-700 mb-1">
+                        SoundCloud URL
+                    </label>
+                    <input type="url" id="soundcloudUrl" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="https://soundcloud.com/artist/track"
+                        pattern="https?:\/\/(www\.)?soundcloud\.com\/.+" title="Please enter a valid SoundCloud URL">
+                </div>
+
+                <div>
+                    <label for="receiverIp" class="block text-sm font-medium text-gray-700 mb-1">
+                        Yamaha Receiver IP
+                    </label>
+                    <input type="text" id="receiverIp" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="192.168.1.xxx" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
+                        title="Please enter a valid IP address">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Storage Location</label>
+                    <div class="space-x-4">
+                        <label class="inline-flex items-center hover:text-orange-600 cursor-pointer">
+                            <input type="radio" name="storage" value="local" checked
+                                class="text-orange-500 focus:ring-orange-500">
+                            <span class="ml-2">Local Storage</span>
+                        </label>
+                        <label class="inline-flex items-center hover:text-orange-600 cursor-pointer">
+                            <input type="radio" name="storage" value="fritzbox"
+                                class="text-orange-500 focus:ring-orange-500">
+                            <span class="ml-2">FritzBox Media Storage</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" id="submitBtn"
+                    class="w-full bg-orange-500 text-white py-2 px-4 rounded-md hover:bg-orange-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                    <span>Download and Play</span>
+                </button>
+
+                <div id="status" class="hidden mt-4 p-3 rounded-md"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        async function handleSubmit(event) {
+            event.preventDefault();
+
+            const submitBtn = document.getElementById('submitBtn');
+            const soundcloudUrl = document.getElementById('soundcloudUrl').value;
+            const receiverIp = document.getElementById('receiverIp').value;
+            const storage = document.querySelector('input[name="storage"]:checked').value;
+
+            // Disable button and show loading state
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<div class="spinner"></div> Processing...';
+
+            try {
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        url: soundcloudUrl,
+                        receiverIp,
+                        storage
+                    })
+                });
+
+                const data = await response.json();
+                showStatus(data.message, data.success ? 'success' : 'error');
+            } catch (error) {
+                showStatus('Error processing request', 'error');
+            } finally {
+                // Reset button state
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<span>Download and Play</span>';
+            }
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.innerHTML = `
+                <div class="flex items-center">
+                    ${type === 'success'
+                    ? '<svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>'
+                    : '<svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>'
+                }
+                    <span>${message}</span>
+                </div>`;
+            status.className = `p-3 rounded-md ${type === 'success'
+                ? 'bg-green-100 text-green-700'
+                : 'bg-red-100 text-red-700'
+                }`;
+            status.classList.remove('hidden');
+        }
+
+        // Save and restore form values from localStorage
+        document.addEventListener('DOMContentLoaded', () => {
+            const receiverIp = localStorage.getItem('receiverIp');
+            if (receiverIp) {
+                document.getElementById('receiverIp').value = receiverIp;
+            }
+
+            const storage = localStorage.getItem('storage');
+            if (storage) {
+                document.querySelector(`input[name="storage"][value="${storage}"]`).checked = true;
+            }
+        });
+
+        document.getElementById('receiverIp').addEventListener('change', (e) => {
+            localStorage.setItem('receiverIp', e.target.value);
+        });
+
+        document.querySelectorAll('input[name="storage"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                localStorage.setItem('storage', e.target.value);
+            });
+        });
+    </script>
+</body>
+
+</html>
