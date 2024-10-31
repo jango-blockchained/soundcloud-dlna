@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SoundCloud to DLNA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #f97316;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .tooltip {
+            @apply invisible absolute;
+        }
+
+        .has-tooltip:hover .tooltip {
+            @apply visible z-50;
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-gray-900 to-gray-800 min-h-screen py-8 text-gray-100">
+    <div class="max-w-2xl mx-auto px-4">
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-lg shadow-xl p-6 border border-gray-700">
+            <!-- Header with icon -->
+            <div class="flex items-center mb-8">
+                <svg class="w-10 h-10 text-orange-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+                <div>
+                    <h1
+                        class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-orange-600">
+                        SoundCloud to DLNA</h1>
+                    <p class="text-gray-400 text-sm mt-1">Stream your favorite tracks to DLNA devices</p>
+                </div>
+            </div>
+
+            <form id="dlnaForm" class="space-y-6" onsubmit="handleSubmit(event)">
+                <!-- SoundCloud URL input -->
+                <div class="relative">
+                    <label for="soundcloudUrl" class="block text-sm font-medium text-gray-300 mb-2">
+                        <i class="fas fa-music mr-2"></i>SoundCloud URL
+                    </label>
+                    <input type="url" id="soundcloudUrl" required
+                        class="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-100 placeholder-gray-400"
+                        placeholder="https://soundcloud.com/artist/track"
+                        pattern="https?:\/\/(www\.)?soundcloud\.com\/.+" title="Please enter a valid SoundCloud URL">
+                </div>
+
+                <!-- Storage options with improved styling -->
+                <div class="bg-gray-700/30 p-4 rounded-lg border border-gray-600">
+                    <label class="block text-sm font-medium text-gray-300 mb-3">
+                        <i class="fas fa-hard-drive mr-2"></i>Storage Location
+                    </label>
+                    <div class="space-y-2">
+                        <label
+                            class="flex items-center p-3 rounded-lg hover:bg-gray-700/30 cursor-pointer transition-colors">
+                            <input type="radio" name="storage" value="local" checked
+                                class="text-orange-500 focus:ring-orange-500 focus:ring-offset-gray-800">
+                            <span class="ml-2">
+                                <span class="font-medium">Local Storage</span>
+                                <span class="text-sm text-gray-400 block">Store files on this device</span>
+                            </span>
+                        </label>
+                        <label
+                            class="flex items-center p-3 rounded-lg hover:bg-gray-700/30 cursor-pointer transition-colors">
+                            <input type="radio" name="storage" value="fritzbox"
+                                class="text-orange-500 focus:ring-orange-500 focus:ring-offset-gray-800">
+                            <span class="ml-2">
+                                <span class="font-medium">FritzBox Media Storage</span>
+                                <span class="text-sm text-gray-400 block">Store files on FritzBox NAS</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Submit button -->
+                <button type="submit" id="submitBtn"
+                    class="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-3 px-4 rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center font-medium">
+                    <i class="fas fa-play mr-2"></i>
+                    <span>Download and Play</span>
+                </button>
+
+                <!-- Status message -->
+                <div id="status" class="hidden mt-4 p-4 rounded-lg fade-in"></div>
+            </form>
+
+            <!-- After the form and before Recent Downloads section -->
+            <div class="mt-8 pt-6 border-t border-gray-700">
+                <h2 class="text-xl font-semibold mb-4 text-gray-300">
+                    <i class="fas fa-wifi mr-2"></i>Connected DMR Devices
+                </h2>
+                <div id="dmrDevices" class="space-y-2 mb-6">
+                    <div class="bg-gray-700/30 p-4 rounded-lg border border-gray-600">
+                        <div id="dmrStatus" class="text-sm text-gray-400">
+                            <div class="flex items-center">
+                                <div class="spinner"></div>
+                                <span>Scanning for DMR devices...</span>
+                            </div>
+                        </div>
+                        <div id="dmrList" class="mt-2 space-y-2">
+                            <!-- DMR devices will be listed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Local Storage Files section -->
+            <div class="mt-8 pt-6 border-t border-gray-700">
+                <h2 class="text-xl font-semibold mb-4 text-gray-300">
+                    <i class="fas fa-folder-open mr-2"></i>Local Storage Files
+                </h2>
+                <div id="localFiles" class="space-y-2">
+                    <div class="bg-gray-700/30 rounded-lg border border-gray-600">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-800/50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Name</th>
+                                        <th class="px-4 py-3 text-left">Size</th>
+                                        <th class="px-4 py-3 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="filesList">
+                                    <!-- Files will be listed here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent downloads section -->
+            <div class="mt-8 pt-6 border-t border-gray-700">
+                <h2 class="text-xl font-semibold mb-4 text-gray-300">
+                    <i class="fas fa-history mr-2"></i>Recent Downloads
+                </h2>
+                <div id="recentDownloads" class="space-y-2">
+                    <!-- Downloads will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function handleSubmit(event) {
+            event.preventDefault();
+
+            const submitBtn = document.getElementById('submitBtn');
+            const soundcloudUrl = document.getElementById('soundcloudUrl').value;
+            const storage = document.querySelector('input[name="storage"]:checked').value;
+
+            // Disable button and show loading state
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<div class="spinner"></div> Processing...';
+
+            try {
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        url: soundcloudUrl,
+                        storage
+                    })
+                });
+
+                const data = await response.json();
+                showStatus(data.message, data.success ? 'success' : 'error');
+            } catch (error) {
+                showStatus('Error processing request', 'error');
+            } finally {
+                // Reset button state
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<span>Download and Play</span>';
+            }
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.innerHTML = `
+                <div class="flex items-center">
+                    ${type === 'success'
+                    ? '<svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>'
+                    : '<svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>'
+                }
+                    <span>${message}</span>
+                </div>`;
+            status.className = `p-3 rounded-md ${type === 'success'
+                ? 'bg-green-100 text-green-700'
+                : 'bg-red-100 text-red-700'
+                }`;
+            status.classList.remove('hidden');
+        }
+
+        // Save and restore form values from localStorage
+        document.addEventListener('DOMContentLoaded', () => {
+            const storage = localStorage.getItem('storage');
+            if (storage) {
+                document.querySelector(`input[name="storage"][value="${storage}"]`).checked = true;
+            }
+        });
+
+        document.querySelectorAll('input[name="storage"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                localStorage.setItem('storage', e.target.value);
+            });
+        });
+
+        // Function to update DMR devices list
+        async function updateDMRDevices() {
+            const dmrStatus = document.getElementById('dmrStatus');
+            const dmrList = document.getElementById('dmrList');
+
+            try {
+                const response = await fetch('/dmr/devices');
+                const data = await response.json();
+                const devices = data.devices;
+                const currentPlaying = data.currentPlaying;
+
+                if (devices.length === 0) {
+                    dmrStatus.innerHTML = '<span class="text-yellow-400"><i class="fas fa-exclamation-triangle mr-2"></i>No DMR devices found</span>';
+                    return;
+                }
+
+                dmrStatus.innerHTML = `<span class="text-green-400"><i class="fas fa-check-circle mr-2"></i>${devices.length} device(s) found</span>`;
+                dmrList.innerHTML = devices.map(device => `
+                    <div class="flex flex-col p-3 hover:bg-gray-700/30 rounded">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-grow">
+                                <div class="font-medium">${device.name}</div>
+                                <div class="text-sm text-gray-400">${device.location || device.host}</div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <div class="text-green-400">
+                                    <i class="fas fa-circle text-xs"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        ${device.currentPlaying ? `
+                            <div class="mt-2 text-sm">
+                                <div class="text-orange-400">
+                                    <i class="fas fa-play-circle mr-2"></i>Now Playing:
+                                </div>
+                                <div class="text-gray-300 ml-6">
+                                    ${device.currentPlaying.title || 'Unknown Track'}
+                                </div>
+                                ${device.currentPlaying.artist ? `
+                                    <div class="text-gray-400 ml-6">
+                                        by ${device.currentPlaying.artist}
+                                    </div>
+                                ` : ''}
+                            </div>
+                            
+                            <!-- DMR Control Panel -->
+                            <div class="mt-4 flex flex-col space-y-3">
+                                <!-- Playback Controls -->
+                                <div class="flex items-center justify-center space-x-4">
+                                    <button onclick="controlDMR('${device.host}', 'previous')" 
+                                            class="text-gray-300 hover:text-orange-400 transition-colors"
+                                            title="Previous">
+                                        <i class="fas fa-step-backward"></i>
+                                    </button>
+                                    
+                                    <button onclick="controlDMR('${device.host}', 'play')" 
+                                            class="text-gray-300 hover:text-orange-400 transition-colors"
+                                            title="Play">
+                                        <i class="fas fa-play"></i>
+                                    </button>
+                                    
+                                    <button onclick="controlDMR('${device.host}', 'pause')" 
+                                            class="text-gray-300 hover:text-orange-400 transition-colors"
+                                            title="Pause">
+                                        <i class="fas fa-pause"></i>
+                                    </button>
+                                    
+                                    <button onclick="controlDMR('${device.host}', 'stop')" 
+                                            class="text-gray-300 hover:text-orange-400 transition-colors"
+                                            title="Stop">
+                                        <i class="fas fa-stop"></i>
+                                    </button>
+                                    
+                                    <button onclick="controlDMR('${device.host}', 'next')" 
+                                            class="text-gray-300 hover:text-orange-400 transition-colors"
+                                            title="Next">
+                                        <i class="fas fa-step-forward"></i>
+                                    </button>
+                                </div>
+                                
+                                <!-- Volume Controls -->
+                                <div class="flex items-center justify-center space-x-4">
+                                    <button onclick="controlDMR('${device.host}', 'volume-down')" 
+                                            class="text-gray-300 hover:text-orange-400 transition-colors"
+                                            title="Volume Down">
+                                        <i class="fas fa-volume-down"></i>
+                                    </button>
+                                    
+                                    <div class="text-gray-300">
+                                        ${device.currentPlaying.volume || 50}%
+                                    </div>
+                                    
+                                    <button onclick="controlDMR('${device.host}', 'volume-up')" 
+                                            class="text-gray-300 hover:text-orange-400 transition-colors"
+                                            title="Volume Up">
+                                        <i class="fas fa-volume-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `).join('');
+            } catch (error) {
+                dmrStatus.innerHTML = '<span class="text-red-400"><i class="fas fa-times-circle mr-2"></i>Error fetching DMR devices</span>';
+            }
+        }
+
+        // Add function to stop playback
+        async function stopPlayback(deviceHost) {
+            try {
+                const response = await fetch('/dmr/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ host: deviceHost })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    updateDMRDevices();
+                } else {
+                    showStatus('Failed to stop playback', 'error');
+                }
+            } catch (error) {
+                showStatus('Error stopping playback', 'error');
+            }
+        }
+
+        // Function to update local files list
+        async function updateLocalFiles() {
+            const filesList = document.getElementById('filesList');
+
+            try {
+                console.log('Fetching files from /files/local');
+                const response = await fetch('/files/local');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const files = await response.json();
+                console.log('Received files:', files);
+
+                if (files.length === 0) {
+                    filesList.innerHTML = `
+                        <tr class="border-t border-gray-700">
+                            <td colspan="3" class="px-4 py-3 text-center text-gray-400">
+                                <i class="fas fa-info-circle mr-2"></i>No files found
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                filesList.innerHTML = files.map(file => `
+                    <tr class="border-t border-gray-700 hover:bg-gray-700/30">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center">
+                                <i class="fas fa-music text-orange-500 mr-2"></i>
+                                ${file.name}
+                            </div>
+                        </td>
+                        <td class="px-4 py-3">${formatFileSize(file.size)}</td>
+                        <td class="px-4 py-3 text-right">
+                            <button onclick="playFile('${encodeURIComponent(file.path)}')" 
+                                    class="text-orange-500 hover:text-orange-400 mr-2"
+                                    title="Play">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <button onclick="deleteFile('${encodeURIComponent(file.path)}')" 
+                                    class="text-red-500 hover:text-red-400"
+                                    title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading files:', error);
+                filesList.innerHTML = `
+                    <tr class="border-t border-gray-700">
+                        <td colspan="3" class="px-4 py-3 text-center text-red-400">
+                            <i class="fas fa-times-circle mr-2"></i>Error loading files: ${error.message}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Utility function to format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Function to play a file
+        async function playFile(path) {
+            try {
+                const response = await fetch('/play', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ path })
+                });
+                const data = await response.json();
+                showStatus(data.message, data.success ? 'success' : 'error');
+            } catch (error) {
+                showStatus('Error playing file', 'error');
+            }
+        }
+
+        // Function to delete a file
+        async function deleteFile(path) {
+            if (!confirm('Are you sure you want to delete this file?')) return;
+
+            try {
+                const response = await fetch('/files/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ path })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    updateLocalFiles();
+                }
+                showStatus(data.message, data.success ? 'success' : 'error');
+            } catch (error) {
+                showStatus('Error deleting file', 'error');
+            }
+        }
+
+        // Update DMR devices and local files periodically
+        document.addEventListener('DOMContentLoaded', () => {
+            // ... existing DOMContentLoaded code ...
+
+            updateDMRDevices();
+            updateLocalFiles();
+            setInterval(updateDMRDevices, 10000); // Update DMR devices every 10 seconds
+        });
+
+        // Function to control DMR device
+        async function controlDMR(deviceHost, action) {
+            try {
+                const response = await fetch('/dmr/control', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        host: deviceHost,
+                        action: action
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    updateDMRDevices(); // Refresh device status
+                } else {
+                    showStatus(`Failed to ${action}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error controlling device: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+
+</html>

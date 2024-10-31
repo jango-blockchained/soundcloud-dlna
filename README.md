@@ -163,6 +163,101 @@ node server.js
 - `GET /api/status` - Get current server status
 - `GET /api/queue` - Get download queue status
 
+## API Endpoints Overview
+
+### Download Management
+
+- `POST /download`
+  - Download audio from URL
+  - Body: `{ "url": "string", "receiverIp": "string?", "storage": "local|nas" }`
+
+### File Management
+
+- `GET /files`
+  - List all downloaded files
+  - Query params: `sort`, `order`, `filter`
+- `GET /files/:filename`
+  - Get detailed file information
+- `DELETE /files/:filename`
+  - Delete a specific file
+- `PUT /files/:filename`
+  - Rename a file
+  - Body: `{ "newName": "string" }`
+- `GET /files/local`
+  - Get list of local files
+- `POST /files/delete`
+  - Delete a file
+  - Body: `{ "path": "string" }`
+
+### DLNA/DMR Control
+
+- `GET /dmr/devices`
+  - List available DMR devices
+- `POST /dmr/stop`
+  - Stop playback on DMR device
+  - Body: `{ "host": "string" }`
+
+### Google Cast Support
+
+- `GET /cast/devices`
+  - List available Google Cast devices
+- `POST /cast/play`
+  - Play media on Cast device
+  - Body:
+
+    ```json
+    {
+      "host": "string",
+      "mediaUrl": "string",
+      "metadata": {
+        "title": "string",
+        "artist": "string",
+        "album": "string"
+      }
+    }
+    ```
+
+- `POST /cast/stop`
+  - Stop playback on Cast device
+  - Body: `{ "host": "string" }`
+
+### System Configuration
+
+- `POST /set-download-path`
+  - Set custom download directory
+  - Body: `{ "path": "string" }`
+- `GET /api/status`
+  - Get server status and configuration
+
+## Streaming Technologies
+
+### DLNA/DMR Support
+
+The application supports DLNA (Digital Living Network Alliance) and DMR (Digital Media Renderer) devices for streaming audio content across your local network. This allows playback on compatible smart TVs, speakers, and other media devices.
+
+### Google Cast Integration
+
+The application now includes support for Google Cast devices, enabling streaming to:
+
+- Chromecast devices
+- Google Home speakers
+- Other Cast-enabled devices
+
+Features:
+
+- Auto-discovery of Cast devices on the network
+- Media metadata support
+- Playback control (play, stop)
+- Real-time status updates
+
+To use Google Cast features:
+
+1. Ensure your Cast device is on the same network
+2. Use the web interface or API endpoints to:
+   - List available Cast devices
+   - Select a device for playback
+   - Control media playback
+
 ## Contributing
 
 1. Fork the repository

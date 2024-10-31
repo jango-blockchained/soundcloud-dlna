@@ -163,14 +163,95 @@ check_node_version() {
     log_message "Node.js version $node_version detected"
 }
 
+# Function to check and install curl if needed
+check_curl() {
+    if ! command -v curl &> /dev/null; then
+        log_message "Installing curl..."
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            if command -v apt-get &> /dev/null; then
+                sudo apt-get update && sudo apt-get install -y curl
+            elif command -v yum &> /dev/null; then
+                sudo yum install -y curl
+            fi
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install curl
+        fi
+    fi
+}
+
+# Function to check and configure permissions
+configure_permissions() {
+    local dirs=("downloads" "temp" "logs")
+    for dir in "${dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            chmod 755 "$dir"
+            log_message "Set permissions for directory: $dir"
+        fi
+    done
+}
+
+# Function to verify system requirements
+verify_system_requirements() {
+    local min_space_mb=500
+    local available_space
+    
+    if [[ "$OSTYPE" == "darwin"* ]] || [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        available_space=$(df -m . | awk 'NR==2 {print $4}')
+    elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
+        available_space=$(df -m . | awk 'NR==2 {print $4}')
+    fi
+
+    if [ "$available_space" -lt "$min_space_mb" ]; then
+        log_message "Error: Insufficient disk space. Required: ${min_space_mb}MB, Available: ${available_space}MB"
+        exit 1
+    fi
+}
+
+# Function to setup Avahi
+setup_avahi() {
+    log_message "Setting up Avahi..."
+    
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Install Avahi and required packages
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y avahi-daemon avahi-discover libnss-mdns libavahi-compat-libdnssd-dev
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y avahi avahi-tools nss-mdns avahi-compat-libdns_sd-devel
+        fi
+
+        # Enable and start Avahi daemon
+        if command -v systemctl &> /dev/null; then
+            sudo systemctl enable avahi-daemon
+            sudo systemctl start avahi-daemon
+            log_message "Avahi daemon enabled and started"
+        else
+            sudo service avahi-daemon start
+            log_message "Avahi daemon started"
+        fi
+
+        # Configure NSSwitch if needed
+        if [ -f "/etc/nsswitch.conf" ]; then
+            if ! grep -q "mdns_minimal \[NOTFOUND=return\]" /etc/nsswitch.conf; then
+                sudo sed -i '/^hosts:/ s/$/ mdns_minimal [NOTFOUND=return]/' /etc/nsswitch.conf
+                log_message "Updated nsswitch.conf for mDNS resolution"
+            fi
+        fi
+    fi
+}
+
 # Main execution
 main() {
     log_message "Starting preinstall script..."
     
+    verify_system_requirements
+    check_curl
     check_node_version
     create_directories
+    configure_permissions
     install_ytdlp
     install_ffmpeg
+    setup_avahi
     
     log_message "Preinstall completed successfully!"
 }

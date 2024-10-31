@@ -24,5 +24,41 @@
             "windowMs": 900000,
             "maxRequests": 100
         }
+    },
+    "receiver": {
+        "enabled": true,
+        "type": "dmr",
+        "settings": {
+            "port": 8080,
+            "host": "192.168.178.25",
+            "audioFormat": "pcm",
+            "sampleRate": 8000,
+            "channels": 1,
+            "encoding": "signed-integer",
+            "recordingPath": "./recordings",
+            "metadata": {
+                "enabled": true,
+                "format": "json"
+            }
+        },
+        "filters": {
+            "talkgroups": [],
+            "radioIds": [],
+            "slots": [
+                1,
+                2
+            ],
+            "minDuration": 1000,
+            "maxDuration": 60000
+        },
+        "processing": {
+            "gainControl": false,
+            "noiseReduction": false,
+            "autoConvert": {
+                "enabled": true,
+                "format": "mp3",
+                "bitrate": "128k"
+            }
+        }
     }
 }

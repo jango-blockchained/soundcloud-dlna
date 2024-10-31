@@ -12,18 +12,29 @@ const winston = require("winston");
 const util = require("util");
 const stat = util.promisify(fs.stat);
 const net = require("net"); // Add this for DMR socket connection
+const fileManager = require("./fileManager");
+const castService = require("./services/castService");
 
 const logger = winston.createLogger({
-  level: config.logging.level,
+  level: config.logging.level || "info",
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
   transports: [
-    new winston.transports.Console(),
-    ...(config.logging.saveToFile
-      ? [
-          new winston.transports.File({
-            filename: `${config.logging.logPath}/app.log`,
-          }),
-        ]
-      : []),
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      ),
+    }),
+    new winston.transports.File({
+      filename: `${config.logging.directory}/error.log`,
+      level: "error",
+    }),
+    new winston.transports.File({
+      filename: `${config.logging.directory}/combined.log`,
+    }),
   ],
 });
 
@@ -54,12 +65,23 @@ if (config.server?.cors?.enabled) {
   );
 }
 
-// Rate limiting
-if (config.api?.rateLimiting?.enabled) {
-  // Add optional chaining
+// Ensure rate limiting config exists with defaults
+if (!config.api) {
+  config.api = {};
+}
+if (!config.api.rateLimiting) {
+  config.api.rateLimiting = {
+    enabled: false,
+    windowMs: 900000, // 15 minutes
+    maxRequests: 100,
+  };
+}
+
+// Rate limiting setup (existing code)
+if (config.api.rateLimiting.enabled) {
   const limiter = rateLimit({
-    windowMs: config.api.rateLimiting.windowMs || 15 * 60 * 1000, // Default: 15 minutes
-    max: config.api.rateLimiting.maxRequests || 100, // Default: 100 requests
+    windowMs: config.api.rateLimiting.windowMs,
+    max: config.api.rateLimiting.maxRequests,
   });
   app.use(limiter);
 }
@@ -432,6 +454,7 @@ app.use("/downloads", express.static(config.storage.downloadPath));
 
 // Add DMR receiver setup
 let dmrSocket = null;
+let currentPlayback = null;
 if (config.receiver.enabled && config.receiver.type === "dmr") {
   setupDMRReceiver();
 }
@@ -445,6 +468,23 @@ function setupDMRReceiver() {
     logger.info(
       `Connected to DMR receiver at ${settings.host}:${settings.port}`
     );
+  });
+
+  // Track current playback state
+  dmrSocket.on("data", (data) => {
+    try {
+      const message = data.toString().trim();
+      if (message.startsWith("PLAYING:")) {
+        currentPlayback = {
+          title: message.substring(9),
+          timestamp: Date.now(),
+        };
+      } else if (message === "STOPPED") {
+        currentPlayback = null;
+      }
+    } catch (error) {
+      logger.error("Error processing DMR data:", error);
+    }
   });
 
   let currentRecording = null;
@@ -491,7 +531,6 @@ function setupDMRReceiver() {
       logger.error("Error processing DMR data:", error);
     }
   });
-
   dmrSocket.on("error", (error) => {
     logger.error("DMR socket error:", error);
     setTimeout(setupDMRReceiver, 3000); // Reconnect after 3 seconds
@@ -552,6 +591,323 @@ async function convertAudio(inputPath) {
   }
 }
 
+// Initialize cast service
+castService.start();
+
+// Add these routes
+app.get("/cast/devices", (req, res) => {
+  try {
+    const devices = castService.getDevices();
+    res.json({
+      success: true,
+      devices: devices,
+    });
+  } catch (error) {
+    logger.error("Error getting Cast devices:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error getting Cast devices",
+    });
+  }
+});
+
+app.post("/cast/play", async (req, res) => {
+  const { host, mediaUrl, metadata } = req.body;
+
+  try {
+    const status = await castService.play(host, mediaUrl, metadata);
+    res.json({
+      success: true,
+      status: status,
+    });
+  } catch (error) {
+    logger.error("Error playing media on Cast device:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error playing media on Cast device",
+    });
+  }
+});
+
+app.post("/cast/stop", async (req, res) => {
+  const { host } = req.body;
+
+  try {
+    await castService.stop(host);
+    res.json({
+      success: true,
+    });
+  } catch (error) {
+    logger.error("Error stopping Cast playback:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error stopping Cast playback",
+    });
+  }
+});
+
 app.listen(port, ip, () => {
   logger.info(`Server running at http://${ip}:${port}`);
+});
+
+function validateConfig(config) {
+  // Required fields
+  const required = {
+    "server.port": (val) => typeof val === "number" && val > 0 && val < 65536,
+    "server.ip": (val) => typeof val === "string",
+    "storage.downloadPath": (val) => typeof val === "string",
+    "storage.tempPath": (val) => typeof val === "string",
+    "ytdlp.path": (val) => typeof val === "string",
+    "logging.level": (val) => ["error", "warn", "info", "debug"].includes(val),
+    "logging.directory": (val) => typeof val === "string",
+  };
+
+  for (const [path, validator] of Object.entries(required)) {
+    const value = path.split(".").reduce((obj, key) => obj?.[key], config);
+    if (value === undefined) {
+      throw new Error(`Missing required config: ${path}`);
+    }
+    if (!validator(value)) {
+      throw new Error(`Invalid value for ${path}`);
+    }
+  }
+}
+
+function ensureDirectories(config) {
+  const dirs = [
+    config.storage.downloadPath,
+    config.storage.tempPath,
+    config.logging.directory,
+  ];
+
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) {
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        logger.info(`Created directory: ${dir}`);
+      } catch (error) {
+        throw new Error(`Failed to create directory ${dir}: ${error.message}`);
+      }
+    }
+  }
+}
+
+// Add to server initialization
+try {
+  validateConfig(config);
+  ensureDirectories(config);
+} catch (error) {
+  logger.error(`Configuration error: ${error.message}`);
+  process.exit(1);
+}
+
+app.get("/api/status", (req, res) => {
+  const status = {
+    config: {
+      server: {
+        port: config.server.port,
+        ip: config.server.ip,
+        cors: config.server.cors.enabled,
+      },
+      storage: {
+        downloadPath: {
+          path: config.storage.downloadPath,
+          exists: fs.existsSync(config.storage.downloadPath),
+        },
+        tempPath: {
+          path: config.storage.tempPath,
+          exists: fs.existsSync(config.storage.tempPath),
+        },
+      },
+      ytdlp: {
+        exists: fs.existsSync(config.ytdlp.path),
+      },
+      logging: {
+        level: config.logging.level,
+        directory: {
+          path: config.logging.directory,
+          exists: fs.existsSync(config.logging.directory),
+        },
+      },
+      rateLimiting: config.api?.rateLimiting?.enabled || false,
+    },
+    system: {
+      nodeVersion: process.version,
+      platform: process.platform,
+      uptime: process.uptime(),
+    },
+  };
+
+  res.json(status);
+});
+
+// Get list of local files
+app.get("/files/local", (req, res) => {
+  console.log("Received request for /files/local");
+  try {
+    const files = fileManager.getLocalFiles();
+    console.log("Files found:", files);
+    res.json(files);
+  } catch (error) {
+    console.error("Error getting local files:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error loading files",
+    });
+  }
+});
+
+// Delete a file
+app.post("/files/delete", (req, res) => {
+  const { path } = req.body;
+  try {
+    fileManager.deleteFile(path);
+    res.json({
+      success: true,
+      message: "File deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting file:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error deleting file",
+    });
+  }
+});
+
+// Play a file
+app.post("/play", (req, res) => {
+  const { path } = req.body;
+  try {
+    // Add your DLNA/DMR playing logic here
+    // This is just a placeholder response
+    res.json({
+      success: true,
+      message: "Playing file...",
+    });
+  } catch (error) {
+    console.error("Error playing file:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error playing file",
+    });
+  }
+});
+
+// Add these routes before app.listen()
+app.get("/dmr/devices", (req, res) => {
+  try {
+    // Get configured DMR device from config
+    const configuredDevice = {
+      name: "Configured DMR",
+      host: config.receiver.settings.host,
+      location: `Port: ${config.receiver.settings.port}`,
+      currentPlaying: null,
+    };
+
+    // Add any additional connected devices from dlnaService
+    const additionalDevices = dlnaService.players.map((player) => ({
+      name: player.name,
+      host: player.host,
+      location: player.location,
+      currentPlaying: player.currentPlayback || null,
+    }));
+
+    // Combine configured and discovered devices
+    const devices = [configuredDevice, ...additionalDevices];
+
+    res.json({
+      success: true,
+      devices: devices,
+    });
+  } catch (error) {
+    logger.error("Error getting DMR devices:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error getting DMR devices",
+    });
+  }
+});
+
+app.post("/dmr/stop", (req, res) => {
+  const { host } = req.body;
+  try {
+    if (host === config.receiver.settings.host) {
+      // Stop configured DMR device
+      if (dmrSocket && dmrSocket.writable) {
+        dmrSocket.write("STOP\n");
+      }
+    } else {
+      // Stop DLNA device
+      const device = dlnaService.players.find((p) => p.host === host);
+      if (device) {
+        device.stop();
+      }
+    }
+    res.json({ success: true });
+  } catch (error) {
+    logger.error("Error stopping playback:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error stopping playback",
+    });
+  }
+});
+
+// Add this new endpoint for DMR control
+app.post("/dmr/control", async (req, res) => {
+  const { host, action } = req.body;
+
+  try {
+    const device = dlnaService.players.find((p) => p.host === host);
+
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        message: "Device not found",
+      });
+    }
+
+    switch (action) {
+      case "play":
+        await device.play();
+        break;
+      case "pause":
+        await device.pause();
+        break;
+      case "stop":
+        await device.stop();
+        break;
+      case "previous":
+        await device.previous();
+        break;
+      case "next":
+        await device.next();
+        break;
+      case "volume-up":
+        const currentVol = device.volume || 50;
+        await device.setVolume(Math.min(currentVol + 10, 100));
+        break;
+      case "volume-down":
+        const currVol = device.volume || 50;
+        await device.setVolume(Math.max(currVol - 10, 0));
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          message: "Invalid action",
+        });
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully executed ${action}`,
+    });
+  } catch (error) {
+    logger.error(`Error controlling DMR device: ${error}`);
+    res.status(500).json({
+      success: false,
+      message: `Error controlling device: ${error.message}`,
+    });
+  }
 });
